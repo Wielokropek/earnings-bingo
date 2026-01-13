@@ -1,12 +1,11 @@
 import streamlit as st
 import google.generativeai as genai
 from google.api_core import exceptions
-import random
 
 # --- 1. PAGE SETUP ---
-st.set_page_config(page_title="Earnings Bingo", layout="wide", page_icon="🎯")
+st.set_page_config(page_title="Earnings Bingo 2026", layout="wide", page_icon="🎯")
 
-# Styling to make it look like a Bingo Card
+# Custom CSS for the Bingo Grid
 st.markdown("""
     <style>
     div.stButton > button:first-child {
@@ -14,6 +13,7 @@ st.markdown("""
         font-weight: bold;
         font-size: 16px;
         white-space: normal;
+        border-radius: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -22,62 +22,61 @@ st.markdown("""
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
-    st.error("Missing API Key! Please add 'GEMINI_API_KEY' to your Streamlit Secrets.")
+    st.error("Missing API Key! Go to Streamlit Settings > Secrets and add GEMINI_API_KEY.")
 
 # --- 3. THE APP INTERFACE ---
 st.title("🎯 Earnings Call Bingo")
-st.write("Turn dry corporate financial calls into a fun game!")
+st.write("Analyze the latest corporate jargon and play along!")
 
-# Text area for user to paste transcript
 transcript_input = st.text_area(
     "Paste the Earnings Call Transcript here:", 
     height=200, 
-    placeholder="Copy text from a site like Motley Fool or Seeking Alpha..."
+    placeholder="Copy the text from Motley Fool, Seeking Alpha, or an IR page..."
 )
 
 # --- 4. LOGIC TO GENERATE WORDS ---
 if st.button("Generate Bingo Board"):
     if transcript_input:
-        with st.spinner("Analyzing transcript... Please wait (this can take 10-20 seconds)."):
+        with st.spinner("AI is scanning for cliches..."):
             try:
-                # Using 1.5-flash as it is more reliable for free tier accounts
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                # UPDATED FOR 2026: Using the stable gemini-2.5-flash model
+                model = genai.GenerativeModel('gemini-2.5-flash')
                 
                 prompt = (
-                    "Act as a financial analyst. Analyze this earnings call transcript. "
-                    "Extract exactly 25 unique corporate buzzwords, cliches, or repetitive "
-                    "business jargon phrases used. Return ONLY a comma-separated list of "
-                    "the 25 items. No introduction, no numbers. "
-                    f"Transcript: {transcript_input[:20000]}"
+                    "You are a corporate jargon expert. Analyze this earnings transcript. "
+                    "Pick exactly 25 unique buzzwords, cliches, or repetitive business phrases "
+                    "(e.g., 'Tailwinds', 'AI-driven', 'Synergies'). "
+                    "Return ONLY a comma-separated list of 25 items. No other text."
+                    f"\n\nTranscript: {transcript_input[:15000]}"
                 )
                 
                 response = model.generate_content(prompt)
                 
-                # Turn the comma-separated text into a Python list
-                raw_words = response.text.split(",")
-                clean_words = [w.strip() for w in raw_words if w.strip()]
+                # Split the AI response into a list of words
+                words = [w.strip() for w in response.text.split(",") if w.strip()]
                 
-                # Make sure we have at least 25
-                if len(clean_words) >= 25:
-                    st.session_state.bingo_words = clean_words[:25]
+                if len(words) >= 25:
+                    st.session_state.bingo_words = words[:25]
                     st.session_state.marked = [False] * 25
-                    st.success("Bingo Board Ready!")
+                    st.success("Board Generated!")
                 else:
-                    st.error("The AI didn't find enough buzzwords. Try pasting more text.")
+                    st.error(f"The AI only found {len(words)} words. Try pasting a longer transcript.")
 
+            except exceptions.NotFound:
+                st.error("❌ Model Error: It looks like this model version was just updated. Try changing 'gemini-2.5-flash' to 'gemini-3-flash' in the code.")
             except exceptions.ResourceExhausted:
-                st.error("⚠️ GOOGLE QUOTA FULL: The free tier is busy. Please wait 60 seconds and click Generate again.")
+                st.error("⚠️ Free limit reached. Wait 60 seconds and try again.")
             except Exception as e:
-                st.error(f"Something went wrong: {e}")
+                st.error(f"Error: {e}")
     else:
         st.warning("Please paste a transcript first!")
 
-# --- 5. THE BINGO GRID RENDERING ---
+# --- 5. THE BINGO GRID ---
 if "bingo_words" in st.session_state:
     st.write("---")
-    st.subheader("Click a word to mark it!")
+    st.subheader("Click to mark your board:")
     
-    # Create the 5x5 grid layout
+    # Create the 5x5 grid
     for row in range(5):
         cols = st.columns(5)
         for col in range(5):
@@ -85,14 +84,13 @@ if "bingo_words" in st.session_state:
             word = st.session_state.bingo_words[idx]
             is_marked = st.session_state.marked[idx]
             
-            # Button color changes if marked (Primary = Red/Orange, Secondary = Gray)
-            button_type = "primary" if is_marked else "secondary"
+            # Change color if clicked
+            btn_type = "primary" if is_marked else "secondary"
             
-            if cols[col].button(word, key=f"cell_{idx}", use_container_width=True, type=button_type):
+            if cols[col].button(word, key=f"cell_{idx}", use_container_width=True, type=btn_type):
                 st.session_state.marked[idx] = not st.session_state.marked[idx]
                 st.rerun()
 
-    # Reset Button
-    if st.button("Clear Board"):
+    if st.button("Start Over"):
         del st.session_state.bingo_words
         st.rerun()
